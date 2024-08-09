@@ -1,7 +1,7 @@
 use anyhow::Result;
 use secparser::downloader::DownloadConfigBuilder;
 use secparser::financial_statement::data_source::FsDataSource;
-use secparser::financial_statement::submission_record::FsSubmissionRecords;
+use secparser::financial_statement::tag_record::FsTagRecords;
 
 fn main() -> Result<()> {
     env_logger::init();
@@ -13,7 +13,7 @@ fn main() -> Result<()> {
         .build()?;
     let data_source = FsDataSource::get(download_config)?;
 
-    let _ = FsSubmissionRecords::new(data_source)?;
+    let _ = FsTagRecords::new(data_source)?;
 
     Ok(())
 }
