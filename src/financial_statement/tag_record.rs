@@ -1,13 +1,15 @@
-use colored::Colorize;
-use csv::ReaderBuilder;
+use csv::{self, DeserializeRecordsIter, Reader, ReaderBuilder};
 use std::fs::File;
 use std::io::{BufRead, BufReader};
+use std::path::PathBuf;
+use std::vec;
+use zip::read::ZipFile;
+use zip::ZipArchive;
 
 use anyhow::Result;
 use serde::Deserialize;
 
 use crate::deserializer::bool_from_int;
-use crate::traits::FileReader;
 
 use super::data_source::FsDataSource;
 
@@ -19,48 +21,70 @@ pub struct FsTag {
     pub custom: bool,
     #[serde(deserialize_with = "bool_from_int")]
     pub r#abstract: bool,
-    pub datatype: Option<String>,
-    pub iord: Option<char>,
-    pub crdr: Option<char>,
-    pub tlabel: Option<String>,
-    pub doc: Option<String>,
+    pub datatype: String,
+    pub iord: String,
+    pub crdr: String,
+    pub tlabel: String,
+    pub doc: String,
 }
 
-pub struct FsTagRecords {
-    // pub count: usize,
-    //
-    // lines: FileLines,
+type FsZipArchive = ZipArchive<File>;
+type FileIter = vec::IntoIter<FsZipArchive>;
+type RecordIter<'a> = csv::DeserializeRecordsIntoIter<BufReader<ZipFile<'a>>, FsTag>;
+
+pub struct FsTagRecords<'a> {
+    file_iter: FileIter,
+    record_iter: Option<RecordIter<'a>>,
 }
 
-impl FileReader for FsTagRecords {}
+impl<'a> FsTagRecords<'a> {
+    pub fn new(datasource: FsDataSource) -> Result<Self> {
+        let archive_files = datasource
+            .zip_files
+            .into_iter()
+            .map(|path| {
+                let file =
+                    File::open(&path).unwrap_or_else(|e| panic!("Should open {path:?}: {e}"));
+                zip::ZipArchive::new(file)
+                    .unwrap_or_else(|e| panic!("Should get zip file {path:?}: {e}"))
+            })
+            .collect::<Vec<FsZipArchive>>();
+        let file_iter = archive_files.into_iter();
 
-impl FsTagRecords {
-    pub fn new(datasource: FsDataSource) -> Result<()> {
-        for file in datasource.zip_files {
-            let file = File::open(file)?;
-            let mut archive = zip::ZipArchive::new(file)?;
+        Ok(Self {
+            file_iter,
+            record_iter: None,
+        })
+    }
 
-            let tag_file = archive.by_name("tag.tsv")?;
-            let reader = BufReader::new(tag_file);
-            let mut reader = ReaderBuilder::new().delimiter(b'\t').from_reader(reader);
-            for record in reader.deserialize::<FsTag>() {
-                match record {
-                    Ok(r) => println!("{}", format!("{:?}", r).bright_green()),
-                    Err(e) => println!("{}", format!("{:?}", e).bright_red()),
-                }
-                break;
+    fn get_next_reader(&mut self) -> Result<Option<RecordIter>> {
+        match self.file_iter.next() {
+            Some(mut archive) => {
+                let tag_file = archive.by_name("tag.tsv")?;
+
+                let reader = BufReader::new(tag_file);
+                let reader: Reader<BufReader<ZipFile>> =
+                    ReaderBuilder::new().delimiter(b'\t').from_reader(reader);
+                let iter = reader.into_deserialize();
+
+                Ok(Some(iter))
             }
+            None => Ok(None),
         }
-
-        Ok(())
-        // Ok(FsTagRecords {})
     }
 }
 
-impl Iterator for FsTagRecords {
+impl<'a> Iterator for FsTagRecords<'a> {
     type Item = FsTag;
 
+    //     for record in reader.deserialize::<FsTag>() {
+    //         match record {
+    //             Ok(r) => println!("{:?}", r),
+    //             Err(e) => println!("{:?}", e),
+    //         }
+    //     }
     fn next(&mut self) -> Option<Self::Item> {
-        todo!()
+        // loop till get a valid reader or reader is None
+        None
     }
 }
