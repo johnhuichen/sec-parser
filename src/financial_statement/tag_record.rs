@@ -33,6 +33,7 @@ type FileIter = vec::IntoIter<FsZipArchive>;
 type RecordIter<'a> = csv::DeserializeRecordsIntoIter<BufReader<ZipFile<'a>>, FsTag>;
 
 pub struct FsTagRecords<'a> {
+    archive: Option<FsZipArchive>,
     file_iter: FileIter,
     record_iter: Option<RecordIter<'a>>,
 }
@@ -53,14 +54,16 @@ impl<'a> FsTagRecords<'a> {
 
         Ok(Self {
             file_iter,
+            archive: None,
             record_iter: None,
         })
     }
 
     fn get_next_reader(&mut self) -> Result<Option<RecordIter>> {
         match self.file_iter.next() {
-            Some(mut archive) => {
-                let tag_file = archive.by_name("tag.tsv")?;
+            Some(archive) => {
+                self.archive = Some(archive);
+                let tag_file = self.archive.as_mut().unwrap().by_name("tag.tsv")?;
 
                 let reader = BufReader::new(tag_file);
                 let reader: Reader<BufReader<ZipFile>> =
